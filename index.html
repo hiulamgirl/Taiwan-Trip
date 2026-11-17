@@ -461,7 +461,7 @@
     </div>
   </div>
 
-  <!-- 資料庫與雲端同步邏輯 (JSONbin 穩定版) -->
+  <!-- 雲端同步邏輯 -->
   <script>
     const defaultItineraryData = [
       {
@@ -598,7 +598,6 @@
     let addSelectedPayer = '我';
     let editSelectedPayer = '我';
 
-    // 雲端同步 ID（使用 JSONbin 穩定版 API）
     let cloudSyncId = localStorage.getItem('tw_v6_cloud_id') || '';
 
     let itineraryData = JSON.parse(localStorage.getItem('tw_v4_itinerary')) || defaultItineraryData;
@@ -651,7 +650,7 @@
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key' // JSONbin 免費公開寫入支援
+            'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key'
           },
           body: JSON.stringify(payload)
         });
@@ -707,9 +706,9 @@
       document.getElementById('modal-title').innerText = '☁️ 手機與電腦跨裝置雲端同步';
       document.getElementById('modal-body').innerHTML = `
         <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1.5">
-          <p class="font-bold text-muji-blue">💡 如何開啟自動同步？</p>
-          <p>1. 點擊下方綠色<b>「✨ 建立新雲端空間」</b>產生專屬代碼並複製。</p>
-          <p>2. 在另一台裝置（手機或電腦）貼上同一組代碼並按<b>「🔗 綁定並讀取資料」</b>即可自動同步！</p>
+          <p class="font-bold text-muji-blue">💡 如何手動建立與綁定？</p>
+          <p>1. 若點擊<b>「✨ 建立新雲端空間」</b>遇到忙碌，請稍候幾秒再試一次。</p>
+          <p>2. 取得專屬代碼後，在另一台裝置貼上並按<b>「🔗 綁定並讀取資料」</b>即可！</p>
         </div>
 
         <div class="space-y-1.5">
@@ -753,15 +752,15 @@
             localStorage.setItem('tw_v6_cloud_id', id);
             document.getElementById('cloud-id-input').value = id;
             updateCloudBadge('connected', '已雲端同步');
-            alert(`雲端同步空間建立成功！\n\n你的專屬代碼為：\n${id}\n\n請複製這組代碼，貼到另一台裝置綁定即可自動同步！`);
+            alert(`雲端空間建立成功！\n\n您的專屬代碼為：\n${id}\n\n請複製此代碼，在另一台裝置貼上綁定即可自動同步。`);
             return;
           }
         }
-        updateCloudBadge('error', '建立失敗');
-        alert('雲端伺服器暫時忙碌，請稍後再試。');
+        updateCloudBadge('error', '建立忙碌');
+        alert('雲端伺服器目前較忙碌，請等待 5 秒後再次點擊「✨ 建立新雲端空間」。');
       } catch (e) {
         updateCloudBadge('error', '連線異常');
-        alert('無法連線至雲端伺服器，請確認網路連線。');
+        alert('連線異常，請檢查網路後重試。');
       }
     }
 
@@ -778,7 +777,7 @@
       const val = document.getElementById('cloud-id-input').value;
       if (!val) return alert('目前尚無代碼可複製，請先建立新雲端空間！');
       navigator.clipboard.writeText(val);
-      alert('已複製同步代碼！請貼到另一台裝置綁定。');
+      alert('已複製同步代碼！');
     }
 
     function renderAllViews() {
@@ -876,7 +875,6 @@
       return `${h}:${m}`;
     }
 
-    // 自由前後搬動行程方塊順序
     async function moveItineraryItem(dayNum, idx, direction) {
       const dayObj = itineraryData.find(d => d.day === dayNum);
       if (!dayObj) return;
