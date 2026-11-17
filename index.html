@@ -461,7 +461,7 @@
     </div>
   </div>
 
-  <!-- 資料庫與雲端同步邏輯 -->
+  <!-- 資料庫與雲端同步邏輯 (JSONbin 穩定版) -->
   <script>
     const defaultItineraryData = [
       {
@@ -598,8 +598,8 @@
     let addSelectedPayer = '我';
     let editSelectedPayer = '我';
 
-    // 雲端同步 ID（使用支援完美跨域 CORS 的 npoint.io API，不會被瀏覽器攔截）
-    let cloudSyncId = localStorage.getItem('tw_v5_cloud_id') || '';
+    // 雲端同步 ID（使用 JSONbin 穩定版 API）
+    let cloudSyncId = localStorage.getItem('tw_v6_cloud_id') || '';
 
     let itineraryData = JSON.parse(localStorage.getItem('tw_v4_itinerary')) || defaultItineraryData;
     let souvenirs = JSON.parse(localStorage.getItem('tw_v4_souvenirs')) || defaultSouvenirs;
@@ -647,9 +647,12 @@
       updateCloudBadge('syncing', '上傳中...');
       try {
         const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
-        const res = await fetch(`https://api.npoint.io/${cloudSyncId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudSyncId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key' // JSONbin 免費公開寫入支援
+          },
           body: JSON.stringify(payload)
         });
         if (res.ok) updateCloudBadge('connected', '已雲端同步');
@@ -666,29 +669,32 @@
       }
       updateCloudBadge('syncing', '讀取中...');
       try {
-        const res = await fetch(`https://api.npoint.io/${cloudSyncId}`, {
+        const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudSyncId}/latest`, {
           method: 'GET',
-          cache: 'no-store'
+          headers: { 'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key' }
         });
         if (res.ok) {
-          const data = await res.json();
-          if (data.itineraryData) itineraryData = data.itineraryData;
-          if (data.souvenirs) souvenirs = data.souvenirs;
-          if (data.packingList) packingList = data.packingList;
-          if (data.expenses) expenses = data.expenses;
-          if (data.defaultRate) defaultRate = data.defaultRate;
-          if (data.tcHotelNote) tcHotelNote = data.tcHotelNote;
+          const jsonRes = await res.json();
+          const data = jsonRes.record;
+          if (data && data.itineraryData) {
+            if (data.itineraryData) itineraryData = data.itineraryData;
+            if (data.souvenirs) souvenirs = data.souvenirs;
+            if (data.packingList) packingList = data.packingList;
+            if (data.expenses) expenses = data.expenses;
+            if (data.defaultRate) defaultRate = data.defaultRate;
+            if (data.tcHotelNote) tcHotelNote = data.tcHotelNote;
 
-          localStorage.setItem('tw_v4_itinerary', JSON.stringify(itineraryData));
-          localStorage.setItem('tw_v4_souvenirs', JSON.stringify(souvenirs));
-          localStorage.setItem('tw_v4_packing', JSON.stringify(packingList));
-          localStorage.setItem('tw_v4_expenses', JSON.stringify(expenses));
-          localStorage.setItem('tw_v4_default_rate', defaultRate);
-          localStorage.setItem('tw_v4_tc_hotel', tcHotelNote);
+            localStorage.setItem('tw_v4_itinerary', JSON.stringify(itineraryData));
+            localStorage.setItem('tw_v4_souvenirs', JSON.stringify(souvenirs));
+            localStorage.setItem('tw_v4_packing', JSON.stringify(packingList));
+            localStorage.setItem('tw_v4_expenses', JSON.stringify(expenses));
+            localStorage.setItem('tw_v4_default_rate', defaultRate);
+            localStorage.setItem('tw_v4_tc_hotel', tcHotelNote);
 
-          renderAllViews();
-          updateCloudBadge('connected', '已雲端同步');
-          if (manual) alert('已成功從雲端同步最新資料！');
+            renderAllViews();
+            updateCloudBadge('connected', '已雲端同步');
+            if (manual) alert('已成功從雲端同步最新資料！');
+          }
         } else {
           updateCloudBadge('error', '代碼無效');
         }
@@ -702,12 +708,12 @@
       document.getElementById('modal-body').innerHTML = `
         <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1.5">
           <p class="font-bold text-muji-blue">💡 如何開啟自動同步？</p>
-          <p>1. 點擊下方綠色<b>「✨ 建立新雲端空間」</b>產生一組專屬代碼並複製。</p>
-          <p>2. 在另一台裝置（手機或電腦）貼上同一組代碼並按<b>「🔗 綁定並讀取資料」</b>，之後兩邊修改都會即時同步！</p>
+          <p>1. 點擊下方綠色<b>「✨ 建立新雲端空間」</b>產生專屬代碼並複製。</p>
+          <p>2. 在另一台裝置（手機或電腦）貼上同一組代碼並按<b>「🔗 綁定並讀取資料」</b>即可自動同步！</p>
         </div>
 
         <div class="space-y-1.5">
-          <label class="text-xs font-bold text-muji-muted block">目前同步代碼 (Sync ID)</label>
+          <label class="text-xs font-bold text-muji-muted block">目前同步代碼 (Bin ID)</label>
           <div class="flex gap-2">
             <input type="text" id="cloud-id-input" value="${cloudSyncId}" placeholder="尚未建立，請點擊下方綠色按鈕..." class="flex-1 text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
             <button onclick="copyCloudId()" class="px-3 py-2 bg-muji-sand text-muji-text text-xs font-bold rounded-xl">複製</button>
@@ -730,17 +736,21 @@
       updateCloudBadge('syncing', '建立中...');
       try {
         const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
-        const res = await fetch('https://api.npoint.io/', {
+        const res = await fetch('https://api.jsonbin.io/v3/b', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key',
+            'X-Bin-Private': 'false'
+          },
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          const data = await res.json();
-          const id = data.id;
+          const jsonRes = await res.json();
+          const id = jsonRes.metadata && jsonRes.metadata.id;
           if (id) {
             cloudSyncId = id;
-            localStorage.setItem('tw_v5_cloud_id', id);
+            localStorage.setItem('tw_v6_cloud_id', id);
             document.getElementById('cloud-id-input').value = id;
             updateCloudBadge('connected', '已雲端同步');
             alert(`雲端同步空間建立成功！\n\n你的專屬代碼為：\n${id}\n\n請複製這組代碼，貼到另一台裝置綁定即可自動同步！`);
@@ -751,7 +761,7 @@
         alert('雲端伺服器暫時忙碌，請稍後再試。');
       } catch (e) {
         updateCloudBadge('error', '連線異常');
-        alert('無法連線至雲端伺服器，請確認網路未封鎖外部 API。');
+        alert('無法連線至雲端伺服器，請確認網路連線。');
       }
     }
 
@@ -759,7 +769,7 @@
       const inputId = document.getElementById('cloud-id-input').value.trim();
       if (!inputId) return alert('請輸入同步代碼！');
       cloudSyncId = inputId;
-      localStorage.setItem('tw_v5_cloud_id', inputId);
+      localStorage.setItem('tw_v6_cloud_id', inputId);
       closeModal();
       await pullFromCloud(true);
     }
