@@ -80,7 +80,7 @@
   <!-- 手機優先置中容器 -->
   <div class="max-w-md mx-auto min-h-screen bg-muji-bg shadow-xl relative flex flex-col">
 
-    <!-- 頂部標題列 + 雲端同步狀態列 -->
+    <!-- 頂部標題列 + 跨裝置雲端同步狀態列 -->
     <header class="sticky top-0 z-30 bg-muji-bg/95 backdrop-blur-md border-b border-muji-border px-4 pt-3.5 pb-3">
       <div class="flex items-center justify-between gap-2">
         <div>
@@ -88,9 +88,10 @@
           <h1 id="header-title" class="text-lg font-bold tracking-tight text-muji-text mt-0.5">台中・台北 7日慢旅</h1>
         </div>
         <div class="flex items-center gap-1.5">
+          <!-- 雲端同步狀態按鈕 -->
           <button onclick="openCloudSyncModal()" id="cloud-status-btn" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold bg-white border border-muji-border text-muji-text shadow-xs active:scale-95 transition">
             <span id="cloud-dot" class="w-2 h-2 rounded-full bg-gray-400"></span>
-            <span id="cloud-status-text">雲端同步中</span>
+            <span id="cloud-status-text">設定雲端同步</span>
           </button>
           <button onclick="pullFromCloud(true)" title="立即從雲端拉取最新資料" class="p-1.5 rounded-full bg-white border border-muji-border text-muji-blue hover:bg-muji-blueBg active:scale-95 transition">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -99,7 +100,9 @@
       </div>
 
       <!-- 每日行程專用：橫向日期選擇器 -->
-      <div id="day-selector-wrapper" class="mt-3 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-2"></div>
+      <div id="day-selector-wrapper" class="mt-3 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-2">
+        <!-- JS 動態生成 Day 1 ~ Day 7 -->
+      </div>
     </header>
 
     <!-- 主內容區 -->
@@ -108,6 +111,7 @@
       <!-- 分頁 1：每日行程 -->
       <section id="tab-itinerary" class="space-y-4">
         <div id="weather-card" class="bg-white rounded-2xl p-4 border border-muji-border shadow-xs"></div>
+        <div id="day-alert-banner"></div>
         <div id="itinerary-list" class="space-y-3"></div>
       </section>
 
@@ -274,7 +278,7 @@
         </div>
       </section>
 
-      <!-- 分頁 5：分帳記帳本（含代付人 + 淨額結算 + 精準比例） -->
+      <!-- 分頁 5：升級版分帳記帳本（含代付人 + 淨額結算 + 精準比例） -->
       <section id="tab-budget" class="hidden space-y-4">
         
         <!-- 總支出與三人代付結算看板 -->
@@ -377,7 +381,7 @@
             </div>
           </div>
 
-          <!-- 分攤比例設定 -->
+          <!-- 分攤比例設定 (預設顯示 33.34% : 33.33% : 33.33%) -->
           <div class="bg-muji-bg rounded-xl p-3 border border-muji-border space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-muji-text">分攤比例 (%)</span>
@@ -448,7 +452,7 @@
 
   </div>
 
-  <!-- 通用彈出編輯視窗 (Modal) -->
+  <!-- ================= 通用彈出編輯視窗 (Modal) ================= -->
   <div id="edit-modal" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
       <div class="flex items-center justify-between border-b border-muji-border pb-3">
@@ -461,8 +465,9 @@
     </div>
   </div>
 
-  <!-- 資料庫與雲端同步邏輯 -->
+  <!-- 資料庫與跨裝置雲端同步邏輯 -->
   <script>
+    // ================= 1. 預設資料 =================
     const defaultItineraryData = [
       {
         day: 1, date: "11/26 (四)", city: "台中", title: "凌晨出發・台中海線與高美夕陽",
@@ -592,14 +597,16 @@
       { id: "p14", cat: "回程託運打包", name: "可摺疊大容量手提袋 + 隨身行李秤（防止手信超重）", checked: false }
     ];
 
+    // ================= 2. 狀態與跨裝置雲端同步引擎 =================
     let currentDay = 1;
     let currentTab = 'itinerary';
     let souvenirFilter = 'all';
     let addSelectedPayer = '我';
     let editSelectedPayer = '我';
 
-    // 寫死預設雲端同步代碼 (Sync ID)
-    let cloudSyncId = localStorage.getItem('tw_v4_cloud_id') || 'c3d82a691b42490b';
+    // 雲端同步設定 (使用 JSONBlob 免費免註冊 REST API)
+    let cloudSyncId = localStorage.getItem('tw_v4_cloud_id') || '';
+    let isSyncing = false;
 
     let itineraryData = JSON.parse(localStorage.getItem('tw_v4_itinerary')) || defaultItineraryData;
     let souvenirs = JSON.parse(localStorage.getItem('tw_v4_souvenirs')) || defaultSouvenirs;
@@ -611,6 +618,7 @@
       { id: 102, date: '12/02', category: '美食', name: '詹記麻辣火鍋 (預估)', payer: '我', currency: 'TWD', amount: 2400, rate: 4.10, split: { me: 33.34, mom: 33.33, dad: 33.33 } }
     ];
 
+    // 統一儲存與自動推送至雲端
     async function saveAndSyncAll() {
       localStorage.setItem('tw_v4_itinerary', JSON.stringify(itineraryData));
       localStorage.setItem('tw_v4_souvenirs', JSON.stringify(souvenirs));
@@ -638,30 +646,44 @@
         label.innerText = text || '同步異常';
       } else {
         dot.className = 'w-2 h-2 rounded-full bg-gray-400';
-        label.innerText = '雲端同步中';
+        label.innerText = '設定雲端同步';
       }
     }
 
     async function pushToCloud() {
       if (!cloudSyncId) return;
-      updateCloudBadge('syncing', '上傳中...');
+      updateCloudBadge('syncing', '上傳同步中...');
       try {
-        const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
+        const payload = {
+          updatedAt: Date.now(),
+          itineraryData,
+          souvenirs,
+          packingList,
+          expenses,
+          defaultRate,
+          tcHotelNote
+        };
         const res = await fetch(`https://jsonblob.com/api/jsonBlob/${cloudSyncId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (res.ok) updateCloudBadge('connected', '已雲端同步');
-        else updateCloudBadge('error', '連線失敗');
+        if (res.ok) {
+          updateCloudBadge('connected', '已雲端同步');
+        } else {
+          updateCloudBadge('error', '雲端連線失敗');
+        }
       } catch (e) {
         updateCloudBadge('error', '離線模式');
       }
     }
 
     async function pullFromCloud(manual = false) {
-      if (!cloudSyncId) return;
-      updateCloudBadge('syncing', '讀取中...');
+      if (!cloudSyncId) {
+        if (manual) openCloudSyncModal();
+        return;
+      }
+      updateCloudBadge('syncing', '讀取雲端...');
       try {
         const res = await fetch(`https://jsonblob.com/api/jsonBlob/${cloudSyncId}`, {
           headers: { 'Accept': 'application/json' }
@@ -675,6 +697,7 @@
           if (data.defaultRate) defaultRate = data.defaultRate;
           if (data.tcHotelNote) tcHotelNote = data.tcHotelNote;
 
+          // 同步更新本地快取
           localStorage.setItem('tw_v4_itinerary', JSON.stringify(itineraryData));
           localStorage.setItem('tw_v4_souvenirs', JSON.stringify(souvenirs));
           localStorage.setItem('tw_v4_packing', JSON.stringify(packingList));
@@ -694,21 +717,76 @@
     }
 
     function openCloudSyncModal() {
-      document.getElementById('modal-title').innerText = '☁️ 雲端同步設定';
+      document.getElementById('modal-title').innerText = '☁️ 手機與電腦跨裝置雲端同步';
       document.getElementById('modal-body').innerHTML = `
         <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1.5">
-          <p class="font-bold text-muji-blue">💡 說明</p>
-          <p>此網頁已內建預設雲端同步代碼，手機與電腦將自動連結至同一個雲端空間進行即時同步。</p>
+          <p class="font-bold text-muji-blue">💡 如何讓手機與電腦自動同步？</p>
+          <p>1. 在第一台裝置（例如手機）點擊下方<b>「建立新雲端空間」</b>，會產生一組專屬同步代碼。</p>
+          <p>2. 在另一台裝置（例如電腦）貼上同一組代碼並按<b>「綁定並讀取」</b>，之後兩邊任何修改都會自動即時同步！</p>
         </div>
+
         <div class="space-y-1.5">
           <label class="text-xs font-bold text-muji-muted block">目前同步代碼 (Sync ID)</label>
-          <input type="text" id="cloud-id-input" value="${cloudSyncId}" readonly class="w-full text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg text-muji-muted">
+          <div class="flex gap-2">
+            <input type="text" id="cloud-id-input" value="${cloudSyncId}" placeholder="尚未設定，請建立或貼上代碼..." class="flex-1 text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+            <button onclick="copyCloudId()" class="px-3 py-2 bg-muji-sand text-muji-text text-xs font-bold rounded-xl">複製</button>
+          </div>
         </div>
-        <button onclick="closeModal()" class="w-full py-2.5 bg-muji-text text-white text-xs font-bold rounded-xl">關閉</button>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="createNewCloudRoom()" class="py-2.5 px-3 bg-muji-matcha text-white text-xs font-bold rounded-xl shadow-xs">
+            ✨ 建立新雲端空間
+          </button>
+          <button onclick="bindExistingCloudRoom()" class="py-2.5 px-3 bg-muji-text text-white text-xs font-bold rounded-xl shadow-xs">
+            🔗 綁定並讀取資料
+          </button>
+        </div>
       `;
       openModal();
     }
 
+    async function createNewCloudRoom() {
+      updateCloudBadge('syncing', '建立中...');
+      try {
+        const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
+        const res = await fetch('https://jsonblob.com/api/jsonBlob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const locationHeader = res.headers.get('Location') || res.headers.get('location');
+        if (locationHeader) {
+          const id = locationHeader.split('/').pop();
+          cloudSyncId = id;
+          localStorage.setItem('tw_v4_cloud_id', id);
+          document.getElementById('cloud-id-input').value = id;
+          updateCloudBadge('connected', '已雲端同步');
+          alert(`雲端同步空間建立成功！\n\n你的專屬代碼為：\n${id}\n\n請複製這組代碼，在電腦版網頁輸入即可自動同步！`);
+        } else {
+          alert('建立雲端空間時未能取得代碼，請稍後再試。');
+        }
+      } catch (e) {
+        alert('網路連線失敗，請檢查網路狀態。');
+      }
+    }
+
+    async function bindExistingCloudRoom() {
+      const inputId = document.getElementById('cloud-id-input').value.trim();
+      if (!inputId) return alert('請輸入同步代碼！');
+      cloudSyncId = inputId;
+      localStorage.setItem('tw_v4_cloud_id', inputId);
+      closeModal();
+      await pullFromCloud(true);
+    }
+
+    function copyCloudId() {
+      const val = document.getElementById('cloud-id-input').value;
+      if (!val) return alert('目前尚無代碼可複製');
+      navigator.clipboard.writeText(val);
+      alert('已複製同步代碼！請貼到另一台裝置綁定。');
+    }
+
+    // ================= 3. 初始化與視圖渲染 =================
     function renderAllViews() {
       document.getElementById('default-rate-input').value = defaultRate;
       document.getElementById('expense-rate').value = defaultRate;
@@ -724,12 +802,18 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       renderAllViews();
-      if (cloudSyncId) await pullFromCloud(false);
+      if (cloudSyncId) {
+        await pullFromCloud(false);
+      }
+      // 當切換分頁或切回 App 視窗時，自動向雲端檢查最新資料
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && cloudSyncId) pullFromCloud(false);
+        if (document.visibilityState === 'visible' && cloudSyncId) {
+          pullFromCloud(false);
+        }
       });
     });
 
+    // ================= 4. 分頁切換 =================
     function switchTab(tabName) {
       currentTab = tabName;
       const tabs = ['itinerary', 'souvenirs', 'packing', 'info', 'budget'];
@@ -764,6 +848,7 @@
       lucide.createIcons();
     }
 
+    // ================= 5. 行程管理（時間連動 + 編輯 + 衝突偵測） =================
     function renderDaySelector() {
       const container = document.getElementById('day-selector-wrapper');
       container.innerHTML = itineraryData.map(d => {
@@ -771,7 +856,9 @@
         return `
           <button onclick="selectDay(${d.day})" 
             class="flex-shrink-0 px-3.5 py-2 rounded-xl border text-left transition-all ${
-              isActive ? 'bg-muji-text text-white border-muji-text shadow-xs' : 'bg-white text-muji-text border-muji-border hover:bg-muji-sand/50'
+              isActive 
+                ? 'bg-muji-text text-white border-muji-text shadow-xs' 
+                : 'bg-white text-muji-text border-muji-border hover:bg-muji-sand/50'
             }">
             <div class="text-[10px] font-medium ${isActive ? 'text-gray-300' : 'text-muji-muted'}">Day ${d.day}・${d.city}</div>
             <div class="text-xs font-bold mt-0.5">${d.date}</div>
@@ -828,6 +915,37 @@
           </div>
         </div>
       `;
+
+      let dynamicWarnings = [];
+      for (let i = 0; i < data.items.length; i++) {
+        const curr = data.items[i];
+        if (curr.warning) dynamicWarnings.push(`• <b>${curr.title}</b>：${curr.warning.replace(/^[⚠️🚨]\s*/, '')}`);
+        if (i > 0) {
+          const prev = data.items[i - 1];
+          const prevEnd = timeToMins(prev.endTime);
+          const currStart = timeToMins(curr.startTime);
+          if (prevEnd !== null && currStart !== null && currStart < prevEnd) {
+            dynamicWarnings.push(`• <b>時間重疊警示</b>：「${curr.title}」(${curr.startTime}) 早於上一站結束時間 (${prev.endTime})！`);
+          }
+        }
+      }
+
+      const alertBanner = document.getElementById('day-alert-banner');
+      if (dynamicWarnings.length > 0) {
+        alertBanner.innerHTML = `
+          <div class="bg-muji-redBg/90 border border-muji-red/30 rounded-2xl p-3.5 space-y-1.5">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-muji-red">
+              <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+              智能行程管家・時間與動線提醒 (${dynamicWarnings.length})
+            </div>
+            <div class="text-[11px] text-muji-text leading-relaxed space-y-1">
+              ${dynamicWarnings.map(w => `<div>${w}</div>`).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        alertBanner.innerHTML = '';
+      }
 
       const listContainer = document.getElementById('itinerary-list');
       const typeConfig = {
@@ -888,16 +1006,19 @@
                   </span>
                 </div>
                 <div class="flex items-center gap-1.5 flex-shrink-0">
-                  <button onclick="openEditItineraryModal(${dayNum}, ${idx})" class="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-muji-bg hover:bg-muji-sand border border-muji-border text-muji-muted">
+                  <button onclick="openEditItineraryModal(${dayNum}, ${idx})" 
+                    class="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-muji-bg hover:bg-muji-sand border border-muji-border text-muji-muted">
                     <i data-lucide="edit-2" class="w-3 h-3"></i> 編輯
                   </button>
-                  <a href="${mapUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-muji-bg hover:bg-muji-sand border border-muji-border text-muji-text">
+                  <a href="${mapUrl}" target="_blank" rel="noopener noreferrer" 
+                    class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-muji-bg hover:bg-muji-sand border border-muji-border text-muji-text">
                     <i data-lucide="navigation" class="w-3 h-3 text-muji-blue"></i> 導航
                   </a>
                 </div>
               </div>
 
               <h3 class="font-bold text-base text-muji-text leading-snug">${item.title}</h3>
+
               ${cardWarning}
               ${tagsHtml ? `<div class="flex flex-wrap gap-1.5">${tagsHtml}</div>` : ''}
 
@@ -930,7 +1051,7 @@
 
         <label class="flex items-center gap-2 p-2.5 rounded-xl bg-muji-blueBg/60 border border-muji-blue/20 cursor-pointer">
           <input type="checkbox" id="edit-it-cascade" checked class="w-4 h-4 accent-muji-blue">
-          <span class="text-xs font-bold text-muji-blue">自動順延後續行程時間</span>
+          <span class="text-xs font-bold text-muji-blue">若時間有變動，自動順延調節當日後續所有行程時間</span>
         </label>
 
         <div>
@@ -948,13 +1069,13 @@
         </div>
 
         <div>
-          <label class="text-xs font-bold text-muji-muted block mb-1">Google Maps 導航地點</label>
-          <input type="text" id="edit-it-loc" value="${item.location}" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+          <label class="text-xs font-bold text-muji-muted block mb-1">Google Maps 導航地點關鍵字</label>
+          <input type="text" id="edit-it-loc" value="${item.location}" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
 
         <div>
-          <label class="text-xs font-bold text-muji-muted block mb-1">交通與車程資訊</label>
-          <input type="text" id="edit-it-travel" value="${item.travelInfo || ''}" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+          <label class="text-xs font-bold text-muji-muted block mb-1">距上一站距離與車程時間（細字提示）</label>
+          <input type="text" id="edit-it-travel" value="${item.travelInfo || ''}" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
 
         <div>
@@ -963,7 +1084,7 @@
         </div>
 
         <div class="flex gap-2 pt-2">
-          <button onclick="deleteItineraryItem(${dayNum}, ${idx})" class="px-4 py-2.5 rounded-xl bg-muji-redBg text-muji-red text-xs font-bold">刪除</button>
+          <button onclick="deleteItineraryItem(${dayNum}, ${idx})" class="px-4 py-2.5 rounded-xl bg-muji-redBg text-muji-red text-xs font-bold">刪除此項</button>
           <button onclick="saveItineraryEdit(${dayNum}, ${idx})" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存並同步</button>
         </div>
       `;
@@ -1044,15 +1165,15 @@
         </div>
         <div>
           <label class="text-xs font-bold text-muji-muted block mb-1">導航地點</label>
-          <input type="text" id="add-it-loc" placeholder="例如：春水堂 台中" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+          <input type="text" id="add-it-loc" placeholder="例如：春水堂 台中" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
         <div>
           <label class="text-xs font-bold text-muji-muted block mb-1">距離與車程時間</label>
-          <input type="text" id="add-it-travel" placeholder="例如：距上一站約 3 km・車程約 10 分鐘" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+          <input type="text" id="add-it-travel" placeholder="例如：距上一站約 3 km・車程約 10 分鐘" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
         <div>
           <label class="text-xs font-bold text-muji-muted block mb-1">導遊攻略 / 備註</label>
-          <textarea id="add-it-guide" rows="2" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg"></textarea>
+          <textarea id="add-it-guide" rows="2" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg"></textarea>
         </div>
         <button onclick="confirmAddItinerary(${dayNum})" class="w-full py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">加入並同步</button>
       `;
@@ -1082,6 +1203,7 @@
       await saveAndSyncAll();
     }
 
+    // ================= 6. 手信清單 =================
     function renderSouvenirs() {
       const container = document.getElementById('souvenir-list');
       const completedCount = souvenirs.filter(s => s.checked).length;
@@ -1153,15 +1275,15 @@
         </div>
         <div>
           <label class="text-xs font-bold text-muji-muted block mb-1">標籤提示</label>
-          <input type="text" id="edit-sv-tag" value="${item.tag}" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+          <input type="text" id="edit-sv-tag" value="${item.tag}" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
         <label class="flex items-center gap-2 text-xs font-bold text-muji-red">
           <input type="checkbox" id="edit-sv-urgent" ${item.urgent ? 'checked' : ''} class="w-4 h-4 accent-muji-red">
-          標記為「重要預訂 / 托運注意」
+          標記為「重要預訂 / 托運注意」（紅色醒目提示）
         </label>
         <div>
           <label class="text-xs font-bold text-muji-muted block mb-1">詳細備註</label>
-          <textarea id="edit-sv-note" rows="3" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">${item.note}</textarea>
+          <textarea id="edit-sv-note" rows="3" class="w-full text-xs p-2.5 rounded-xl border border-muji-border bg-muji-bg">${item.note}</textarea>
         </div>
         <div class="flex gap-2 pt-2">
           <button onclick="deleteSouvenir('${id}')" class="px-4 py-2.5 rounded-xl bg-muji-redBg text-muji-red text-xs font-bold">刪除</button>
@@ -1202,6 +1324,7 @@
       renderSouvenirs();
     }
 
+    // ================= 7. 行李清單 =================
     function renderPacking() {
       const container = document.getElementById('packing-container');
       const checkedCount = packingList.filter(p => p.checked).length;
@@ -1276,7 +1399,7 @@
           </select>
         </div>
         <div>
-          <label class="text-xs font-bold text-muji-muted block mb-1">物品名稱</label>
+          <label class="text-xs font-bold text-muji-muted block mb-1">物品名稱與備註</label>
           <input type="text" id="edit-pk-name" value="${item.name}" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
         <div class="flex gap-2 pt-2">
@@ -1305,6 +1428,7 @@
       }
     }
 
+    // ================= 8. 住宿備註 =================
     function toggleEditTaichungHotel() {
       document.getElementById('taichung-hotel-edit').classList.toggle('hidden');
     }
@@ -1318,6 +1442,7 @@
       await saveAndSyncAll();
     }
 
+    // ================= 9. 升級版分帳記帳本（代付人 + 精準 33.33334% 計算） =================
     async function updateDefaultRate(val) {
       const num = parseFloat(val);
       if (!isNaN(num) && num > 0) {
@@ -1362,6 +1487,7 @@
       }
     }
 
+    // 精準比例轉換：若輸入顯示為 33.34 / 33.33 / 33.33，內部計算自動套用 33.33334 / 33.33333 / 33.33333
     function getExactSplitRatios(splitObj) {
       const me = Number(splitObj?.me) || 0;
       const mom = Number(splitObj?.mom) || 0;
@@ -1402,6 +1528,7 @@
       document.getElementById('person-mom-share').innerText = share['媽'].toFixed(1);
       document.getElementById('person-dad-share').innerText = share['爸'].toFixed(1);
 
+      // 計算淨額 = 已代付 - 應分攤 (+代表別人要還錢給他，-代表他要給別人錢)
       const renderNetBadge = (elId, netVal) => {
         const el = document.getElementById(elId);
         if (netVal > 0.05) {
@@ -1421,7 +1548,7 @@
       renderNetBadge('person-dad-net', paid['爸'] - share['爸']);
 
       if (expenses.length === 0) {
-        list.innerHTML = `<div class="text-center py-8 text-xs text-muji-muted bg-white rounded-2xl border border-muji-border">目前尚無消費紀錄</div>`;
+        list.innerHTML = `<div class="text-center py-8 text-xs text-muji-muted bg-white rounded-2xl border border-muji-border">目前尚無消費紀錄，上方輸入或導入 Excel 即可開始記帳！</div>`;
         return;
       }
 
@@ -1445,21 +1572,34 @@
                 <div>
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-xs font-bold text-muji-text">${item.name}</span>
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muji-blueBg text-muji-blue">💳 ${payer}代付</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muji-blueBg text-muji-blue">💳 ${payer}先代付</span>
                   </div>
                   <div class="text-xs font-bold text-muji-orange mt-0.5">${origDisplay}</div>
                 </div>
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
-                <button onclick="openEditExpenseModal(${item.id})" class="px-2 py-1 rounded-lg bg-muji-bg text-[11px] font-bold text-muji-text border border-muji-border">編輯</button>
-                <button onclick="deleteExpense(${item.id})" class="p-1.5 text-gray-400 hover:text-muji-red"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                <button onclick="openEditExpenseModal(${item.id})" class="px-2 py-1 rounded-lg bg-muji-bg text-[11px] font-bold text-muji-text border border-muji-border">
+                  編輯
+                </button>
+                <button onclick="deleteExpense(${item.id})" class="p-1.5 text-gray-400 hover:text-muji-red">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
               </div>
             </div>
 
             <div class="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-muji-border/70 text-[11px] text-center">
-              <div class="bg-muji-bg/80 rounded-lg py-1 px-1.5"><span class="text-muji-muted">我 (${item.split.me}%):</span><span class="font-bold text-muji-text block">HK$${meShare}</span></div>
-              <div class="bg-muji-bg/80 rounded-lg py-1 px-1.5"><span class="text-muji-muted">媽 (${item.split.mom}%):</span><span class="font-bold text-muji-text block">HK$${momShare}</span></div>
-              <div class="bg-muji-bg/80 rounded-lg py-1 px-1.5"><span class="text-muji-muted">爸 (${item.split.dad}%):</span><span class="font-bold text-muji-text block">HK$${dadShare}</span></div>
+              <div class="bg-muji-bg/80 rounded-lg py-1 px-1.5">
+                <span class="text-muji-muted">我 (${item.split.me}%):</span>
+                <span class="font-bold text-muji-text block">HK$${meShare}</span>
+              </div>
+              <div class="bg-muji-bg/80 rounded-lg py-1 px-1.5">
+                <span class="text-muji-muted">媽 (${item.split.mom}%):</span>
+                <span class="font-bold text-muji-text block">HK$${momShare}</span>
+              </div>
+              <div class="bg-muji-bg/80 rounded-lg py-1 px-1.5">
+                <span class="text-muji-muted">爸 (${item.split.dad}%):</span>
+                <span class="font-bold text-muji-text block">HK$${dadShare}</span>
+              </div>
             </div>
           </div>
         `;
@@ -1479,8 +1619,12 @@
       const mom = parseFloat(document.getElementById('split-mom').value) || 0;
       const dad = parseFloat(document.getElementById('split-dad').value) || 0;
 
-      if (!name || isNaN(amount) || amount <= 0) return alert('請輸入名稱與金額');
-      if (Math.abs((me + mom + dad) - 100) > 0.5) return alert('比例總和必須為 100%');
+      if (!name || isNaN(amount) || amount <= 0) {
+        return alert('請輸入項目名稱與正確金額！');
+      }
+      if (Math.abs((me + mom + dad) - 100) > 0.5) {
+        return alert(`三人分攤比例總和必須為 100%（目前為 ${(me + mom + dad).toFixed(2)}%）`);
+      }
 
       expenses.push({
         id: Date.now(),
@@ -1525,7 +1669,7 @@
           </select>
           <input type="number" step="0.1" id="edit-ex-amount" value="${item.amount}" class="col-span-5 text-sm font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg">
           <div id="edit-rate-wrapper" class="col-span-4 relative ${item.currency === 'HKD' ? 'opacity-40 pointer-events-none' : ''}">
-            <span class="absolute left-2 top-1 text-[9px] text-muji-muted">匯率</span>
+            <span class="absolute left-2 top-1 text-[9px] text-muji-muted">單項匯率</span>
             <input type="number" step="0.01" id="edit-ex-rate" value="${item.rate || defaultRate}" class="w-full text-xs font-bold pt-4 pb-1 px-2 rounded-xl border border-muji-border bg-muji-bg">
           </div>
         </div>
@@ -1549,9 +1693,18 @@
             </div>
           </div>
           <div class="grid grid-cols-3 gap-2 text-center">
-            <div><label class="text-[10px] text-muji-muted block">我</label><input type="number" step="0.01" id="edit-split-me" value="${item.split.me}" class="w-full text-center text-xs font-bold p-1.5 rounded-lg border border-muji-border bg-white mt-0.5"></div>
-            <div><label class="text-[10px] text-muji-muted block">媽</label><input type="number" step="0.01" id="edit-split-mom" value="${item.split.mom}" class="w-full text-center text-xs font-bold p-1.5 rounded-lg border border-muji-border bg-white mt-0.5"></div>
-            <div><label class="text-[10px] text-muji-muted block">爸</label><input type="number" step="0.01" id="edit-split-dad" value="${item.split.dad}" class="w-full text-center text-xs font-bold p-1.5 rounded-lg border border-muji-border bg-white mt-0.5"></div>
+            <div>
+              <label class="text-[10px] text-muji-muted block">我 (%)</label>
+              <input type="number" step="0.01" id="edit-split-me" value="${item.split.me}" class="w-full text-center text-xs font-bold p-1.5 rounded-lg border border-muji-border bg-white mt-0.5">
+            </div>
+            <div>
+              <label class="text-[10px] text-muji-muted block">媽 (%)</label>
+              <input type="number" step="0.01" id="edit-split-mom" value="${item.split.mom}" class="w-full text-center text-xs font-bold p-1.5 rounded-lg border border-muji-border bg-white mt-0.5">
+            </div>
+            <div>
+              <label class="text-[10px] text-muji-muted block">爸 (%)</label>
+              <input type="number" step="0.01" id="edit-split-dad" value="${item.split.dad}" class="w-full text-center text-xs font-bold p-1.5 rounded-lg border border-muji-border bg-white mt-0.5">
+            </div>
           </div>
         </div>
 
@@ -1570,7 +1723,7 @@
       const dad = parseFloat(document.getElementById('edit-split-dad').value) || 0;
 
       if (isNaN(amount) || amount <= 0) return alert('請輸入正確金額');
-      if (Math.abs((me + mom + dad) - 100) > 0.5) return alert('比例總和必須為 100%');
+      if (Math.abs((me + mom + dad) - 100) > 0.5) return alert('三人分攤比例總和必須為 100%');
 
       item.category = document.getElementById('edit-ex-cat').value;
       item.name = document.getElementById('edit-ex-name').value.trim();
@@ -1586,7 +1739,7 @@
     }
 
     async function deleteExpense(id) {
-      if (confirm('確定刪除？')) {
+      if (confirm('確定刪除這筆消費紀錄？')) {
         expenses = expenses.filter(e => e.id !== id);
         renderExpenses();
         await saveAndSyncAll();
@@ -1594,15 +1747,16 @@
     }
 
     async function clearExpenses() {
-      if (confirm('確定清空所有記帳？')) {
+      if (confirm('確定要清空所有記帳紀錄嗎？')) {
         expenses = [];
         renderExpenses();
         await saveAndSyncAll();
       }
     }
 
+    // Excel 導出與導入
     function exportExpensesExcel() {
-      if (typeof XLSX === 'undefined') return alert('Excel 元件載入中');
+      if (typeof XLSX === 'undefined') return alert('Excel 元件載入中，請確認網路連線後再試。');
       const rows = expenses.map(item => {
         const hkd = calcItemHkd(item);
         const exact = getExactSplitRatios(item.split);
@@ -1617,9 +1771,13 @@
           '折合港幣(HKD)': Number(hkd.toFixed(2)),
           '我_分攤%': Number(item.split.me),
           '媽_分攤%': Number(item.split.mom),
-          '爸_分攤%': Number(item.split.dad)
+          '爸_分攤%': Number(item.split.dad),
+          '我_應付(HKD)': Number((hkd * exact.me / 100).toFixed(2)),
+          '媽_應付(HKD)': Number((hkd * exact.mom / 100).toFixed(2)),
+          '爸_應付(HKD)': Number((hkd * exact.dad / 100).toFixed(2))
         };
       });
+
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "台灣旅費分攤明細");
@@ -1636,7 +1794,8 @@
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-          if (!jsonData || jsonData.length === 0) return alert('Excel 無資料');
+
+          if (!jsonData || jsonData.length === 0) return alert('Excel 檔案中沒有讀取到有效資料！');
 
           const imported = jsonData.map((row, index) => ({
             id: Date.now() + index,
@@ -1654,20 +1813,23 @@
             }
           }));
 
-          if (confirm(`成功讀取 ${imported.length} 筆！按「確定」覆蓋，按「取消」附加`)) expenses = imported;
-          else expenses = expenses.concat(imported);
-
+          if (confirm(`成功讀取 ${imported.length} 筆紀錄！按「確定」覆蓋現有紀錄，按「取消」附加在現有紀錄後方。`)) {
+            expenses = imported;
+          } else {
+            expenses = expenses.concat(imported);
+          }
           renderExpenses();
           await saveAndSyncAll();
-          alert('導入並同步完成！');
+          alert('Excel 導入並雲端同步完成！');
         } catch (err) {
-          alert('讀取 Excel 失敗');
+          alert('讀取 Excel 失敗，請確認格式是否正確。');
         }
         event.target.value = '';
       };
       reader.readAsArrayBuffer(file);
     }
 
+    // ================= 10. 通用 Modal 控制 =================
     function openModal() {
       document.getElementById('edit-modal').classList.remove('hidden');
       lucide.createIcons();
