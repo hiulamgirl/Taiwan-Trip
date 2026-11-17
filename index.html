@@ -11,7 +11,8 @@
   <meta name="apple-mobile-web-app-title" content="台灣7日旅">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#FAF8F5">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FAF8F5'/><text x='50' y='66' font-size='54' text-anchor='middle'>🇹🇼</text></svg>">
+ <link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -90,7 +91,7 @@
         <div class="flex items-center gap-1.5">
           <button onclick="openCloudSyncModal()" id="cloud-status-btn" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold bg-white border border-muji-border text-muji-text shadow-xs active:scale-95 transition">
             <span id="cloud-dot" class="w-2 h-2 rounded-full bg-gray-400"></span>
-            <span id="cloud-status-text">設定雲端同步</span>
+            <span id="cloud-status-text">雲端同步狀態</span>
           </button>
           <button onclick="pullFromCloud(true)" title="立即從雲端拉取最新資料" class="p-1.5 rounded-full bg-white border border-muji-border text-muji-blue hover:bg-muji-blueBg active:scale-95 transition">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -463,6 +464,12 @@
 
   <!-- 雲端同步邏輯 -->
   <script>
+    const DEFAULT_BIN_ID = "6afc6a60ffd5d16053c8bd11";
+    const DEFAULT_MASTER_KEY = "$2a$10$2x4lMEGoqp1TceNN4IT5quO/ae51deFGhCAm3mSBWRPh.KKLQCAeC";
+
+    let cloudSyncId = localStorage.getItem('tw_v7_cloud_id') || DEFAULT_BIN_ID;
+    let masterKey = localStorage.getItem('tw_v7_master_key') || DEFAULT_MASTER_KEY;
+
     const defaultItineraryData = [
       {
         day: 1, date: "11/26 (四)", city: "台中", title: "凌晨出發・台中海線與高美夕陽",
@@ -598,8 +605,6 @@
     let addSelectedPayer = '我';
     let editSelectedPayer = '我';
 
-    let cloudSyncId = localStorage.getItem('tw_v6_cloud_id') || '';
-
     let itineraryData = JSON.parse(localStorage.getItem('tw_v4_itinerary')) || defaultItineraryData;
     let souvenirs = JSON.parse(localStorage.getItem('tw_v4_souvenirs')) || defaultSouvenirs;
     let packingList = JSON.parse(localStorage.getItem('tw_v4_packing')) || defaultPacking;
@@ -618,7 +623,7 @@
       localStorage.setItem('tw_v4_default_rate', defaultRate);
       localStorage.setItem('tw_v4_tc_hotel', tcHotelNote);
 
-      if (cloudSyncId) {
+      if (cloudSyncId && masterKey) {
         await pushToCloud();
       }
     }
@@ -637,12 +642,12 @@
         label.innerText = text || '同步異常';
       } else {
         dot.className = 'w-2 h-2 rounded-full bg-gray-400';
-        label.innerText = '設定雲端同步';
+        label.innerText = '雲端同步狀態';
       }
     }
 
     async function pushToCloud() {
-      if (!cloudSyncId) return;
+      if (!cloudSyncId || !masterKey) return;
       updateCloudBadge('syncing', '上傳中...');
       try {
         const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
@@ -650,7 +655,7 @@
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key'
+            'X-Master-Key': masterKey
           },
           body: JSON.stringify(payload)
         });
@@ -662,7 +667,7 @@
     }
 
     async function pullFromCloud(manual = false) {
-      if (!cloudSyncId) {
+      if (!cloudSyncId || !masterKey) {
         if (manual) openCloudSyncModal();
         return;
       }
@@ -670,7 +675,7 @@
       try {
         const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudSyncId}/latest`, {
           method: 'GET',
-          headers: { 'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key' }
+          headers: { 'X-Master-Key': masterKey }
         });
         if (res.ok) {
           const jsonRes = await res.json();
@@ -695,89 +700,72 @@
             if (manual) alert('已成功從雲端同步最新資料！');
           }
         } else {
-          updateCloudBadge('error', '代碼無效');
+          updateCloudBadge('error', '代碼或金鑰無效');
+          if (manual) alert('同步失敗：請檢查您的 Bin ID 與 Master Key 是否正確。');
         }
       } catch (e) {
         updateCloudBadge('error', '離線模式');
+        if (manual) alert('連線異常，請確認網路連線。');
       }
     }
 
     function openCloudSyncModal() {
-      document.getElementById('modal-title').innerText = '☁️ 手機與電腦跨裝置雲端同步';
+      document.getElementById('modal-title').innerText = '☁️ 雲端同步設定 (Bin ID & Master Key)';
       document.getElementById('modal-body').innerHTML = `
-        <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1.5">
-          <p class="font-bold text-muji-blue">💡 如何手動建立與綁定？</p>
-          <p>1. 若點擊<b>「✨ 建立新雲端空間」</b>遇到忙碌，請稍候幾秒再試一次。</p>
-          <p>2. 取得專屬代碼後，在另一台裝置貼上並按<b>「🔗 綁定並讀取資料」</b>即可！</p>
+        <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1">
+          <p class="font-bold text-muji-blue">✓ 已預先綁定您的專屬帳號設定</p>
+          <p>系統已自動載入您的 Bin ID 與 Master Key，隨時可以點擊下方按鈕讀取或同步。</p>
         </div>
 
-        <div class="space-y-1.5">
-          <label class="text-xs font-bold text-muji-muted block">目前同步代碼 (Bin ID)</label>
-          <div class="flex gap-2">
-            <input type="text" id="cloud-id-input" value="${cloudSyncId}" placeholder="尚未建立，請點擊下方綠色按鈕..." class="flex-1 text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
-            <button onclick="copyCloudId()" class="px-3 py-2 bg-muji-sand text-muji-text text-xs font-bold rounded-xl">複製</button>
-          </div>
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-muji-muted block">Bin ID</label>
+          <input type="text" id="modal-bin-id" value="${cloudSyncId}" class="w-full text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
         </div>
 
-        <div class="grid grid-cols-2 gap-2 pt-1">
-          <button onclick="createNewCloudRoom()" class="py-2.5 px-3 bg-muji-matcha text-white text-xs font-bold rounded-xl shadow-xs">
-            ✨ 建立新雲端空間
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-muji-muted block">Master Key (API 金鑰)</label>
+          <input type="password" id="modal-master-key" value="${masterKey}" class="w-full text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-2">
+          <button onclick="saveAndBindCloudSettings()" class="py-2.5 px-3 bg-muji-matcha text-white text-xs font-bold rounded-xl shadow-xs">
+            💾 儲存並讀取資料
           </button>
-          <button onclick="bindExistingCloudRoom()" class="py-2.5 px-3 bg-muji-text text-white text-xs font-bold rounded-xl shadow-xs">
-            🔗 綁定並讀取資料
+          <button onclick="forceUploadToCloud()" class="py-2.5 px-3 bg-muji-blue text-white text-xs font-bold rounded-xl shadow-xs">
+            ☁️ 立即上傳備份
           </button>
         </div>
       `;
       openModal();
     }
 
-    async function createNewCloudRoom() {
-      updateCloudBadge('syncing', '建立中...');
-      try {
-        const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
-        const res = await fetch('https://api.jsonbin.io/v3/b', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Master-Key': '$2a$10$C8q7Y...fallback...dummy...key',
-            'X-Bin-Private': 'false'
-          },
-          body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-          const jsonRes = await res.json();
-          const id = jsonRes.metadata && jsonRes.metadata.id;
-          if (id) {
-            cloudSyncId = id;
-            localStorage.setItem('tw_v6_cloud_id', id);
-            document.getElementById('cloud-id-input').value = id;
-            updateCloudBadge('connected', '已雲端同步');
-            alert(`雲端空間建立成功！\n\n您的專屬代碼為：\n${id}\n\n請複製此代碼，在另一台裝置貼上綁定即可自動同步。`);
-            return;
-          }
-        }
-        updateCloudBadge('error', '建立忙碌');
-        alert('雲端伺服器目前較忙碌，請等待 5 秒後再次點擊「✨ 建立新雲端空間」。');
-      } catch (e) {
-        updateCloudBadge('error', '連線異常');
-        alert('連線異常，請檢查網路後重試。');
-      }
-    }
+    async function saveAndBindCloudSettings() {
+      const bId = document.getElementById('modal-bin-id').value.trim();
+      const mKey = document.getElementById('modal-master-key').value.trim();
+      if (!bId || !mKey) return alert('Bin ID 與 Master Key 皆不可空白！');
 
-    async function bindExistingCloudRoom() {
-      const inputId = document.getElementById('cloud-id-input').value.trim();
-      if (!inputId) return alert('請輸入同步代碼！');
-      cloudSyncId = inputId;
-      localStorage.setItem('tw_v6_cloud_id', inputId);
+      cloudSyncId = bId;
+      masterKey = mKey;
+      localStorage.setItem('tw_v7_cloud_id', bId);
+      localStorage.setItem('tw_v7_master_key', mKey);
+
       closeModal();
       await pullFromCloud(true);
     }
 
-    function copyCloudId() {
-      const val = document.getElementById('cloud-id-input').value;
-      if (!val) return alert('目前尚無代碼可複製，請先建立新雲端空間！');
-      navigator.clipboard.writeText(val);
-      alert('已複製同步代碼！');
+    async function forceUploadToCloud() {
+      const bId = document.getElementById('modal-bin-id').value.trim();
+      const mKey = document.getElementById('modal-master-key').value.trim();
+      if (!bId || !mKey) return alert('Bin ID 與 Master Key 皆不可空白！');
+
+      cloudSyncId = bId;
+      masterKey = mKey;
+      localStorage.setItem('tw_v7_cloud_id', bId);
+      localStorage.setItem('tw_v7_master_key', mKey);
+
+      closeModal();
+      await pushToCloud();
+      alert('已成功將目前本地資料上傳至雲端！');
     }
 
     function renderAllViews() {
@@ -795,13 +783,13 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       renderAllViews();
-      if (cloudSyncId) {
+      if (cloudSyncId && masterKey) {
         await pullFromCloud(false);
       } else {
-        updateCloudBadge('default', '設定雲端同步');
+        updateCloudBadge('default', '雲端同步狀態');
       }
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && cloudSyncId) pullFromCloud(false);
+        if (document.visibilityState === 'visible' && cloudSyncId && masterKey) pullFromCloud(false);
       });
     });
 
