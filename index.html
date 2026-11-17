@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>台灣 7 日自由行｜雲端同步智能旅遊手冊</title>
+  <title>台灣 7 日自由行｜本地與匯出同步智能手冊</title>
   
   <!-- PWA / 加入主畫面全螢幕設定 -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,8 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="台灣7日旅">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#FAF8F5">
- <link rel="apple-touch-icon" href="icon.png">
-<link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FAF8F5'/><text x='50' y='66' font-size='54' text-anchor='middle'>🇹🇼</text></svg>">
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -81,20 +80,17 @@
   <!-- 手機優先置中容器 -->
   <div class="max-w-md mx-auto min-h-screen bg-muji-bg shadow-xl relative flex flex-col">
 
-    <!-- 頂部標題列 + 雲端同步狀態列 -->
+    <!-- 頂部標題列 + 備份與同步狀態列 -->
     <header class="sticky top-0 z-30 bg-muji-bg/95 backdrop-blur-md border-b border-muji-border px-4 pt-3.5 pb-3">
       <div class="flex items-center justify-between gap-2">
         <div>
-          <p class="text-[10px] tracking-widest text-muji-muted uppercase font-medium">TAIWAN 7-DAY CLOUD GUIDE</p>
+          <p class="text-[10px] tracking-widest text-muji-muted uppercase font-medium">TAIWAN 7-DAY SMART GUIDE</p>
           <h1 id="header-title" class="text-lg font-bold tracking-tight text-muji-text mt-0.5">台中・台北 7日慢旅</h1>
         </div>
         <div class="flex items-center gap-1.5">
-          <button onclick="openCloudSyncModal()" id="cloud-status-btn" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold bg-white border border-muji-border text-muji-text shadow-xs active:scale-95 transition">
-            <span id="cloud-dot" class="w-2 h-2 rounded-full bg-gray-400"></span>
-            <span id="cloud-status-text">雲端同步狀態</span>
-          </button>
-          <button onclick="pullFromCloud(true)" title="立即從雲端拉取最新資料" class="p-1.5 rounded-full bg-white border border-muji-border text-muji-blue hover:bg-muji-blueBg active:scale-95 transition">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <button onclick="openBackupModal()" id="cloud-status-btn" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold bg-white border border-muji-border text-muji-text shadow-xs active:scale-95 transition">
+            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+            <span>數據備份與轉移</span>
           </button>
         </div>
       </div>
@@ -405,7 +401,7 @@
           </div>
 
           <button onclick="addExpense()" class="w-full py-2.5 bg-muji-orange text-white text-xs font-bold rounded-xl shadow-xs active:scale-95 transition">
-            儲存並同步這筆消費
+            儲存這筆消費
           </button>
         </div>
 
@@ -462,14 +458,8 @@
     </div>
   </div>
 
-  <!-- 雲端同步邏輯 -->
+  <!-- 本地儲存與一鍵備份還原邏輯 -->
   <script>
-    const DEFAULT_BIN_ID = "6afc6a60ffd5d16053c8bd11";
-    const DEFAULT_MASTER_KEY = "$2a$10$2x4lMEGoqp1TceNN4IT5quO/ae51deFGhCAm3mSBWRPh.KKLQCAeC";
-
-    let cloudSyncId = localStorage.getItem('tw_v7_cloud_id') || DEFAULT_BIN_ID;
-    let masterKey = localStorage.getItem('tw_v7_master_key') || DEFAULT_MASTER_KEY;
-
     const defaultItineraryData = [
       {
         day: 1, date: "11/26 (四)", city: "台中", title: "凌晨出發・台中海線與高美夕陽",
@@ -605,167 +595,97 @@
     let addSelectedPayer = '我';
     let editSelectedPayer = '我';
 
-    let itineraryData = JSON.parse(localStorage.getItem('tw_v4_itinerary')) || defaultItineraryData;
-    let souvenirs = JSON.parse(localStorage.getItem('tw_v4_souvenirs')) || defaultSouvenirs;
-    let packingList = JSON.parse(localStorage.getItem('tw_v4_packing')) || defaultPacking;
-    let defaultRate = parseFloat(localStorage.getItem('tw_v4_default_rate')) || 4.10;
-    let tcHotelNote = localStorage.getItem('tw_v4_tc_hotel') || '11/26 17:30 Check-in（點擊「備註」填入分館地址與訂房代號）';
-    let expenses = JSON.parse(localStorage.getItem('tw_v4_expenses')) || [
+    let itineraryData = JSON.parse(localStorage.getItem('tw_v5_itinerary')) || defaultItineraryData;
+    let souvenirs = JSON.parse(localStorage.getItem('tw_v5_souvenirs')) || defaultSouvenirs;
+    let packingList = JSON.parse(localStorage.getItem('tw_v5_packing')) || defaultPacking;
+    let defaultRate = parseFloat(localStorage.getItem('tw_v5_default_rate')) || 4.10;
+    let tcHotelNote = localStorage.getItem('tw_v5_tc_hotel') || '11/26 17:30 Check-in（點擊「備註」填入分館地址與訂房代號）';
+    let expenses = JSON.parse(localStorage.getItem('tw_v5_expenses')) || [
       { id: 101, date: '11/26', category: '交通', name: '台中機場包車一日遊', payer: '我', currency: 'TWD', amount: 3500, rate: 4.10, split: { me: 33.34, mom: 33.33, dad: 33.33 } },
       { id: 102, date: '12/02', category: '美食', name: '詹記麻辣火鍋 (預估)', payer: '我', currency: 'TWD', amount: 2400, rate: 4.10, split: { me: 33.34, mom: 33.33, dad: 33.33 } }
     ];
 
-    async function saveAndSyncAll() {
-      localStorage.setItem('tw_v4_itinerary', JSON.stringify(itineraryData));
-      localStorage.setItem('tw_v4_souvenirs', JSON.stringify(souvenirs));
-      localStorage.setItem('tw_v4_packing', JSON.stringify(packingList));
-      localStorage.setItem('tw_v4_expenses', JSON.stringify(expenses));
-      localStorage.setItem('tw_v4_default_rate', defaultRate);
-      localStorage.setItem('tw_v4_tc_hotel', tcHotelNote);
-
-      if (cloudSyncId && masterKey) {
-        await pushToCloud();
-      }
+    function saveAllToLocal() {
+      localStorage.setItem('tw_v5_itinerary', JSON.stringify(itineraryData));
+      localStorage.setItem('tw_v5_souvenirs', JSON.stringify(souvenirs));
+      localStorage.setItem('tw_v5_packing', JSON.stringify(packingList));
+      localStorage.setItem('tw_v5_expenses', JSON.stringify(expenses));
+      localStorage.setItem('tw_v5_default_rate', defaultRate);
+      localStorage.setItem('tw_v5_tc_hotel', tcHotelNote);
     }
 
-    function updateCloudBadge(status, text) {
-      const dot = document.getElementById('cloud-dot');
-      const label = document.getElementById('cloud-status-text');
-      if (status === 'connected') {
-        dot.className = 'w-2 h-2 rounded-full bg-green-500';
-        label.innerText = text || '已雲端同步';
-      } else if (status === 'syncing') {
-        dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
-        label.innerText = text || '同步中...';
-      } else if (status === 'error') {
-        dot.className = 'w-2 h-2 rounded-full bg-red-500';
-        label.innerText = text || '同步異常';
-      } else {
-        dot.className = 'w-2 h-2 rounded-full bg-gray-400';
-        label.innerText = '雲端同步狀態';
-      }
-    }
-
-    async function pushToCloud() {
-      if (!cloudSyncId || !masterKey) return;
-      updateCloudBadge('syncing', '上傳中...');
-      try {
-        const payload = { updatedAt: Date.now(), itineraryData, souvenirs, packingList, expenses, defaultRate, tcHotelNote };
-        const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudSyncId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Master-Key': masterKey
-          },
-          body: JSON.stringify(payload)
-        });
-        if (res.ok) updateCloudBadge('connected', '已雲端同步');
-        else updateCloudBadge('error', '上傳失敗');
-      } catch (e) {
-        updateCloudBadge('error', '離線模式');
-      }
-    }
-
-    async function pullFromCloud(manual = false) {
-      if (!cloudSyncId || !masterKey) {
-        if (manual) openCloudSyncModal();
-        return;
-      }
-      updateCloudBadge('syncing', '讀取中...');
-      try {
-        const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudSyncId}/latest`, {
-          method: 'GET',
-          headers: { 'X-Master-Key': masterKey }
-        });
-        if (res.ok) {
-          const jsonRes = await res.json();
-          const data = jsonRes.record;
-          if (data && data.itineraryData) {
-            if (data.itineraryData) itineraryData = data.itineraryData;
-            if (data.souvenirs) souvenirs = data.souvenirs;
-            if (data.packingList) packingList = data.packingList;
-            if (data.expenses) expenses = data.expenses;
-            if (data.defaultRate) defaultRate = data.defaultRate;
-            if (data.tcHotelNote) tcHotelNote = data.tcHotelNote;
-
-            localStorage.setItem('tw_v4_itinerary', JSON.stringify(itineraryData));
-            localStorage.setItem('tw_v4_souvenirs', JSON.stringify(souvenirs));
-            localStorage.setItem('tw_v4_packing', JSON.stringify(packingList));
-            localStorage.setItem('tw_v4_expenses', JSON.stringify(expenses));
-            localStorage.setItem('tw_v4_default_rate', defaultRate);
-            localStorage.setItem('tw_v4_tc_hotel', tcHotelNote);
-
-            renderAllViews();
-            updateCloudBadge('connected', '已雲端同步');
-            if (manual) alert('已成功從雲端同步最新資料！');
-          }
-        } else {
-          updateCloudBadge('error', '代碼或金鑰無效');
-          if (manual) alert('同步失敗：請檢查您的 Bin ID 與 Master Key 是否正確。');
-        }
-      } catch (e) {
-        updateCloudBadge('error', '離線模式');
-        if (manual) alert('連線異常，請確認網路連線。');
-      }
-    }
-
-    function openCloudSyncModal() {
-      document.getElementById('modal-title').innerText = '☁️ 雲端同步設定 (Bin ID & Master Key)';
+    function openBackupModal() {
+      document.getElementById('modal-title').innerText = '📂 跨裝置資料備份與還原';
       document.getElementById('modal-body').innerHTML = `
-        <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1">
-          <p class="font-bold text-muji-blue">✓ 已預先綁定您的專屬帳號設定</p>
-          <p>系統已自動載入您的 Bin ID 與 Master Key，隨時可以點擊下方按鈕讀取或同步。</p>
+        <div class="bg-muji-blueBg/60 border border-muji-blue/20 rounded-xl p-3 text-xs text-muji-text leading-relaxed space-y-1.5">
+          <p class="font-bold text-muji-blue">💡 手機與電腦如何同步？</p>
+          <p>因為免費伺服器常忙碌，我們改用<b>「一鍵導出／導入備份檔」</b>：</p>
+          <p>1. 點擊<b>「導出完整備份檔」</b>會下載一個小檔案到手機或電腦。</p>
+          <p>2. 在另一台裝置點擊<b>「導入備份檔」</b>選取該檔案，即可瞬間同步所有行程、手信與記帳！</p>
         </div>
 
-        <div class="space-y-1">
-          <label class="text-xs font-bold text-muji-muted block">Bin ID</label>
-          <input type="text" id="modal-bin-id" value="${cloudSyncId}" class="w-full text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
-        </div>
-
-        <div class="space-y-1">
-          <label class="text-xs font-bold text-muji-muted block">Master Key (API 金鑰)</label>
-          <input type="password" id="modal-master-key" value="${masterKey}" class="w-full text-xs font-mono p-2.5 rounded-xl border border-muji-border bg-muji-bg">
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 pt-2">
-          <button onclick="saveAndBindCloudSettings()" class="py-2.5 px-3 bg-muji-matcha text-white text-xs font-bold rounded-xl shadow-xs">
-            💾 儲存並讀取資料
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="exportJSONBackup()" class="py-3 px-3 bg-muji-matcha text-white text-xs font-bold rounded-xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5">
+            <i data-lucide="download" class="w-4 h-4"></i> 導出完整備份檔
           </button>
-          <button onclick="forceUploadToCloud()" class="py-2.5 px-3 bg-muji-blue text-white text-xs font-bold rounded-xl shadow-xs">
-            ☁️ 立即上傳備份
-          </button>
+          <label class="py-3 px-3 bg-muji-blue text-white text-xs font-bold rounded-xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="upload" class="w-4 h-4"></i> 導入備份檔
+            <input type="file" accept=".json" onchange="importJSONBackup(event)" class="hidden">
+          </label>
         </div>
       `;
       openModal();
     }
 
-    async function saveAndBindCloudSettings() {
-      const bId = document.getElementById('modal-bin-id').value.trim();
-      const mKey = document.getElementById('modal-master-key').value.trim();
-      if (!bId || !mKey) return alert('Bin ID 與 Master Key 皆不可空白！');
-
-      cloudSyncId = bId;
-      masterKey = mKey;
-      localStorage.setItem('tw_v7_cloud_id', bId);
-      localStorage.setItem('tw_v7_master_key', mKey);
-
-      closeModal();
-      await pullFromCloud(true);
+    function exportJSONBackup() {
+      const data = {
+        version: 5,
+        updatedAt: new Date().toISOString(),
+        itineraryData,
+        souvenirs,
+        packingList,
+        expenses,
+        defaultRate,
+        tcHotelNote
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Taiwan_Trip_Backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      alert('備份檔已成功導出！請將此檔案傳送到另一台裝置並點擊「導入備份檔」即可同步。');
     }
 
-    async function forceUploadToCloud() {
-      const bId = document.getElementById('modal-bin-id').value.trim();
-      const mKey = document.getElementById('modal-master-key').value.trim();
-      if (!bId || !mKey) return alert('Bin ID 與 Master Key 皆不可空白！');
+    function importJSONBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const json = JSON.parse(e.target.result);
+          if (json && json.itineraryData) {
+            itineraryData = json.itineraryData;
+            souvenirs = json.souvenirs || souvenirs;
+            packingList = json.packingList || packingList;
+            expenses = json.expenses || expenses;
+            defaultRate = json.defaultRate || defaultRate;
+            tcHotelNote = json.tcHotelNote || tcHotelNote;
 
-      cloudSyncId = bId;
-      masterKey = mKey;
-      localStorage.setItem('tw_v7_cloud_id', bId);
-      localStorage.setItem('tw_v7_master_key', mKey);
-
-      closeModal();
-      await pushToCloud();
-      alert('已成功將目前本地資料上傳至雲端！');
+            saveAllToLocal();
+            renderAllViews();
+            closeModal();
+            alert('數據成功導入並同步！所有行程與記帳已更新。');
+          } else {
+            alert('備份檔格式不正確');
+          }
+        } catch (err) {
+          alert('讀取備份檔失敗');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
     }
 
     function renderAllViews() {
@@ -781,16 +701,8 @@
       lucide.createIcons();
     }
 
-    document.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('DOMContentLoaded', () => {
       renderAllViews();
-      if (cloudSyncId && masterKey) {
-        await pullFromCloud(false);
-      } else {
-        updateCloudBadge('default', '雲端同步狀態');
-      }
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && cloudSyncId && masterKey) pullFromCloud(false);
-      });
     });
 
     function switchTab(tabName) {
@@ -863,7 +775,7 @@
       return `${h}:${m}`;
     }
 
-    async function moveItineraryItem(dayNum, idx, direction) {
+    function moveItineraryItem(dayNum, idx, direction) {
       const dayObj = itineraryData.find(d => d.day === dayNum);
       if (!dayObj) return;
       const targetIdx = idx + direction;
@@ -875,7 +787,7 @@
 
       renderItinerary(dayNum);
       lucide.createIcons();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
     function renderItinerary(dayNum) {
@@ -1052,13 +964,13 @@
 
         <div class="flex gap-2 pt-2">
           <button onclick="deleteItineraryItem(${dayNum}, ${idx})" class="px-4 py-2.5 rounded-xl bg-muji-redBg text-muji-red text-xs font-bold">刪除</button>
-          <button onclick="saveItineraryEdit(${dayNum}, ${idx})" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存並同步</button>
+          <button onclick="saveItineraryEdit(${dayNum}, ${idx})" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存變更</button>
         </div>
       `;
       openModal();
     }
 
-    async function saveItineraryEdit(dayNum, idx) {
+    function saveItineraryEdit(dayNum, idx) {
       const dayObj = itineraryData.find(d => d.day === dayNum);
       const item = dayObj.items[idx];
 
@@ -1091,17 +1003,17 @@
       closeModal();
       renderItinerary(dayNum);
       lucide.createIcons();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function deleteItineraryItem(dayNum, idx) {
+    function deleteItineraryItem(dayNum, idx) {
       if (confirm('確定要刪除這個行程嗎？')) {
         const dayObj = itineraryData.find(d => d.day === dayNum);
         dayObj.items.splice(idx, 1);
         closeModal();
         renderItinerary(dayNum);
         lucide.createIcons();
-        await saveAndSyncAll();
+        saveAllToLocal();
       }
     }
 
@@ -1142,12 +1054,12 @@
           <label class="text-xs font-bold text-muji-muted block mb-1">導遊攻略 / 備註</label>
           <textarea id="add-it-guide" rows="2" class="w-full text-xs font-bold p-2.5 rounded-xl border border-muji-border bg-muji-bg"></textarea>
         </div>
-        <button onclick="confirmAddItinerary(${dayNum})" class="w-full py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">加入並同步</button>
+        <button onclick="confirmAddItinerary(${dayNum})" class="w-full py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">確認新增</button>
       `;
       openModal();
     }
 
-    async function confirmAddItinerary(dayNum) {
+    function confirmAddItinerary(dayNum) {
       const title = document.getElementById('add-it-title').value.trim();
       if (!title) return alert('請輸入行程標題');
       const dayObj = itineraryData.find(d => d.day === dayNum);
@@ -1167,7 +1079,7 @@
       closeModal();
       renderItinerary(dayNum);
       lucide.createIcons();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
     function renderSouvenirs() {
@@ -1208,13 +1120,13 @@
       lucide.createIcons();
     }
 
-    async function toggleSouvenir(id) {
+    function toggleSouvenir(id) {
       souvenirs = souvenirs.map(s => s.id === id ? { ...s, checked: !s.checked } : s);
       renderSouvenirs();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function addNewSouvenir() {
+    function addNewSouvenir() {
       const input = document.getElementById('new-souvenir-name');
       const name = input.value.trim();
       if (!name) return;
@@ -1228,7 +1140,7 @@
       });
       input.value = '';
       renderSouvenirs();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
     function openEditSouvenirModal(id) {
@@ -1253,13 +1165,13 @@
         </div>
         <div class="flex gap-2 pt-2">
           <button onclick="deleteSouvenir('${id}')" class="px-4 py-2.5 rounded-xl bg-muji-redBg text-muji-red text-xs font-bold">刪除</button>
-          <button onclick="saveSouvenirEdit('${id}')" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存並同步</button>
+          <button onclick="saveSouvenirEdit('${id}')" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存變更</button>
         </div>
       `;
       openModal();
     }
 
-    async function saveSouvenirEdit(id) {
+    function saveSouvenirEdit(id) {
       const item = souvenirs.find(s => s.id === id);
       item.name = document.getElementById('edit-sv-name').value.trim();
       item.tag = document.getElementById('edit-sv-tag').value.trim();
@@ -1267,15 +1179,15 @@
       item.note = document.getElementById('edit-sv-note').value.trim();
       closeModal();
       renderSouvenirs();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function deleteSouvenir(id) {
+    function deleteSouvenir(id) {
       if (confirm('確定刪除此手信項目？')) {
         souvenirs = souvenirs.filter(s => s.id !== id);
         closeModal();
         renderSouvenirs();
-        await saveAndSyncAll();
+        saveAllToLocal();
       }
     }
 
@@ -1331,13 +1243,13 @@
       lucide.createIcons();
     }
 
-    async function togglePacking(id) {
+    function togglePacking(id) {
       packingList = packingList.map(p => p.id === id ? { ...p, checked: !p.checked } : p);
       renderPacking();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function addPackingItem() {
+    function addPackingItem() {
       const cat = document.getElementById('packing-cat-select').value;
       const input = document.getElementById('new-packing-input');
       const name = input.value.trim();
@@ -1346,7 +1258,7 @@
       packingList.push({ id: 'p_' + Date.now(), cat, name, checked: false });
       input.value = '';
       renderPacking();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
     function openEditPackingModal(id) {
@@ -1369,50 +1281,50 @@
         </div>
         <div class="flex gap-2 pt-2">
           <button onclick="deletePacking('${id}')" class="px-4 py-2.5 rounded-xl bg-muji-redBg text-muji-red text-xs font-bold">刪除</button>
-          <button onclick="savePackingEdit('${id}')" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存並同步</button>
+          <button onclick="savePackingEdit('${id}')" class="flex-1 py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存變更</button>
         </div>
       `;
       openModal();
     }
 
-    async function savePackingEdit(id) {
+    function savePackingEdit(id) {
       const item = packingList.find(p => p.id === id);
       item.cat = document.getElementById('edit-pk-cat').value;
       item.name = document.getElementById('edit-pk-name').value.trim();
       closeModal();
       renderPacking();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function deletePacking(id) {
+    function deletePacking(id) {
       if (confirm('確定刪除此行李項目？')) {
         packingList = packingList.filter(p => p.id !== id);
         closeModal();
         renderPacking();
-        await saveAndSyncAll();
+        saveAllToLocal();
       }
     }
 
     function toggleEditTaichungHotel() {
       document.getElementById('taichung-hotel-edit').classList.toggle('hidden');
     }
-    async function saveTaichungHotel() {
+    function saveTaichungHotel() {
       const note = document.getElementById('input-tc-note').value.trim();
       if (note) {
         tcHotelNote = note;
         document.getElementById('tc-hotel-note').innerText = tcHotelNote;
       }
       toggleEditTaichungHotel();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function updateDefaultRate(val) {
+    function updateDefaultRate(val) {
       const num = parseFloat(val);
       if (!isNaN(num) && num > 0) {
         defaultRate = num;
         document.getElementById('expense-rate').value = defaultRate;
         renderExpenses();
-        await saveAndSyncAll();
+        saveAllToLocal();
       }
     }
 
@@ -1556,7 +1468,7 @@
       lucide.createIcons();
     }
 
-    async function addExpense() {
+    function addExpense() {
       const category = document.getElementById('expense-category').value;
       const name = document.getElementById('expense-name').value.trim();
       const currency = document.getElementById('expense-currency').value;
@@ -1585,7 +1497,7 @@
       document.getElementById('expense-name').value = '';
       document.getElementById('expense-amount').value = '';
       renderExpenses();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
     function openEditExpenseModal(id) {
@@ -1643,12 +1555,12 @@
           </div>
         </div>
 
-        <button onclick="saveExpenseEdit(${id})" class="w-full py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存並同步</button>
+        <button onclick="saveExpenseEdit(${id})" class="w-full py-2.5 rounded-xl bg-muji-text text-white text-xs font-bold">儲存變更</button>
       `;
       openModal();
     }
 
-    async function saveExpenseEdit(id) {
+    function saveExpenseEdit(id) {
       const item = expenses.find(e => e.id === id);
       const currency = document.getElementById('edit-ex-currency').value;
       const amount = parseFloat(document.getElementById('edit-ex-amount').value);
@@ -1670,22 +1582,22 @@
 
       closeModal();
       renderExpenses();
-      await saveAndSyncAll();
+      saveAllToLocal();
     }
 
-    async function deleteExpense(id) {
+    function deleteExpense(id) {
       if (confirm('確定刪除？')) {
         expenses = expenses.filter(e => e.id !== id);
         renderExpenses();
-        await saveAndSyncAll();
+        saveAllToLocal();
       }
     }
 
-    async function clearExpenses() {
+    function clearExpenses() {
       if (confirm('確定清空所有記帳？')) {
         expenses = [];
         renderExpenses();
-        await saveAndSyncAll();
+        saveAllToLocal();
       }
     }
 
@@ -1717,7 +1629,7 @@
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = async function(e) {
+      reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
@@ -1745,12 +1657,12 @@
           else expenses = expenses.concat(imported);
 
           renderExpenses();
-          await saveAndSyncAll();
-          alert('導入並同步完成！');
+          saveAllToLocal();
+          alert('導入完成！');
         } catch (err) {
           alert('讀取 Excel 失敗');
         }
-        event.target.value = '';
+        event.target.value = './';
       };
       reader.readAsArrayBuffer(file);
     }
