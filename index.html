@@ -11,7 +11,8 @@
   <meta name="apple-mobile-web-app-title" content="台灣7日旅">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#FAF8F5">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FAF8F5'/><text x='50' y='66' font-size='54' text-anchor='middle'>🇹🇼</text></svg>">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icon-192.png">
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1005,6 +1006,11 @@ service cloud.firestore {
     document.addEventListener('DOMContentLoaded', () => {
       renderAllViews();
       initializeFirebaseFromSavedConfig();
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js')
+          .catch((err) => console.error('Service Worker 註冊失敗:', err));
+      }
     });
 
     function switchTab(tabName) {
